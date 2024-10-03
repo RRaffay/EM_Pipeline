@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.venv/
+poetry.lock
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React
+/.pnp/
+.pnp.js
+
+# Build files
+/dist/
+/build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Miscellaneous
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+**.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Output
+em_news_analysis/reports/
+reports/
+em_news_analysis/exported_data/
+exported_data/
+em_news_analysis/gdelt_cache/
+em_news_analysis/notebooks/
+gdelt_cache/
+em_news_analysis/embeddings_cache/
+embeddings_cache/
+
+# .env file anywhere 
+**/.env
+**/em-news-gdelt.json
+**/.env.*
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
