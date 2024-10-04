@@ -159,7 +159,6 @@ class DataLoader:
         embeddings, valid_positions = generate_embeddings(
             df,
             embedding_function=None,  # Use default OpenAI function
-            max_workers=self.config.max_workers
         )
 
         # Add embeddings to the dataframe
