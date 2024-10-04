@@ -35,14 +35,14 @@ class DataLoader:
             f"Fetching GDELT data for country: {country_code} for the past {hours} hours.")
 
         cache_file = os.path.join(
-            self.config.gdelt_cache_dir, f"{country_code}_{hours}hours.pkl")
+            self.config.gdelt_cache_dir, f"{country_code}_{hours}hours_raw.pkl")
 
         if self.config.use_cache and os.path.exists(cache_file):
             with open(cache_file, 'rb') as f:
                 cache_time, df = pickle.load(f)
             if datetime.now() - cache_time <= self.config.gdelt_cache_expiry:
                 logger.info(
-                    f"Using cached GDELT data from {cache_time}.")
+                    f"Using cached raw GDELT data from {cache_time}.")
                 return df
 
         query = f"""
@@ -139,6 +139,10 @@ class DataLoader:
             logger.info(f"Removed {rows_before - rows_after} duplicate rows.")
 
             logger.info(f"Fetched {len(df)} rows of GDELT data.")
+            if self.config.use_cache:
+                with open(cache_file, 'wb') as f:
+                    pickle.dump((datetime.now(), df), f)
+                logger.info(f"Cached raw GDELT data.")
             return df
         except Exception as e:
             logger.error(f"Error fetching GDELT data: {e}")
@@ -221,33 +225,36 @@ class DataLoader:
         """
         Load GDELT data, either from cache or by fetching and preprocessing.
         """
-        cache_file = os.path.join(
-            self.config.gdelt_embeddings_cache_dir, f"{country_code}_{hours}hours_preprocessed.pkl")
+        # Check for preprocessed data with embeddings
+        preprocessed_cache_file = os.path.join(self.config.gdelt_embeddings_cache_dir, f"{country_code}_{hours}hours_preprocessed.pkl")
 
-        if self.config.use_cache and os.path.exists(cache_file):
-            with open(cache_file, 'rb') as f:
+        if self.config.use_cache and os.path.exists(preprocessed_cache_file):
+            with open(preprocessed_cache_file, 'rb') as f:
                 cache_time, df = pickle.load(f)
             if datetime.now() - cache_time <= self.config.embeddings_cache_expiry:
-                logger.info(
-                    f"Using cached preprocessed GDELT data with embeddings from {cache_time}.")
+                logger.info(f"Using cached preprocessed GDELT data with embeddings from {cache_time}.")
                 return df
 
-        # Fetch raw data
+        # Fetch raw data (now with its own caching mechanism)
         raw_df = self.fetch_gdelt_data(country_code, hours)
         if raw_df.empty:
             logger.error("No GDELT data fetched.")
             return None
 
         # Preprocess data and generate embeddings
-        preprocessed_df = self.preprocess_gdelt_data(raw_df)
+        try:
+            preprocessed_df = self.preprocess_gdelt_data(raw_df)
 
-        # Cache the preprocessed data with embeddings
-        if self.config.use_cache:
-            with open(cache_file, 'wb') as f:
-                pickle.dump((datetime.now(), preprocessed_df), f)
-            logger.info(f"Cached preprocessed GDELT data with embeddings.")
+            # Cache the preprocessed data with embeddings
+            if self.config.use_cache:
+                with open(preprocessed_cache_file, 'wb') as f:
+                    pickle.dump((datetime.now(), preprocessed_df), f)
+                logger.info(f"Cached preprocessed GDELT data with embeddings.")
 
-        return preprocessed_df
+            return preprocessed_df
+        except Exception as e:
+            logger.error(f"Error preprocessing GDELT data: {e}")
+            return None
 
     def load_data(self):
         """

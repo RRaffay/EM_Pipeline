@@ -28,8 +28,8 @@ client = OpenAI(api_key=config.openai_api_key)
 
 @retry(
     retry=retry_if_exception_type(RateLimitError),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(min=1, max=60))
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(min=1, max=10))
 def get_embedding(text: str, model: str = "text-embedding-3-small", embedding_function: Callable = None) -> List[float]:
     """
     Generate an embedding for a given text using the specified embedding function or OpenAI's API.
@@ -72,6 +72,9 @@ def generate_embeddings(
     """
     embeddings = []
     valid_positions = []
+    processed_count = 0
+    total_rows = len(df)
+    logger.info(f"Generating embeddings for {total_rows} rows with {max_workers} workers")
 
     def process_row(position, text):
         """
@@ -96,16 +99,25 @@ def generate_embeddings(
                 f"Failed to generate embedding for position {position}: {str(e)}")
             return None
 
-    total_rows = len(df)
     positions = range(total_rows)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(
-            tqdm(executor.map(process_row, positions, df['combined']), total=total_rows))
-    for result in results:
-        if result is not None:
-            position, embedding = result
-            embeddings.append(embedding)
-            valid_positions.append(position)
+        futures = list(tqdm(executor.map(process_row, positions, df['combined']),total=total_rows))
+        
+        for i, result in enumerate(futures, total=total_rows, desc="Generating embeddings"):
+            if result is not None:
+                position, embedding = result
+                embeddings.append(embedding)
+                valid_positions.append(position)
+                processed_count += 1
+                
+                # Log progress after every 50 rows
+                if processed_count % 50 == 0:
+                    remaining = total_rows - (i + 1)
+                    logger.info(f"Processed {processed_count} rows. Remaining: {remaining}")
+        
+
+    # Log final count
+    logger.info(f"Finished processing. Total rows processed: {processed_count}")
 
     embeddings_array = np.array(embeddings)
 

@@ -2,7 +2,7 @@
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
-
+import multiprocessing
 
 class Config:
     def __init__(self):
@@ -12,7 +12,7 @@ class Config:
         # Data parameters
         self.country_code = 'IN'  # India
         self.ticker_symbol = '^NSEI'  # Nifty 50 Index
-        self.hours = 120   # 120 hours
+        self.hours = 48   # 48 hours
         self.user_interest = "Economic growth and technology sector in India"
 
         # Update caching parameters
@@ -24,7 +24,8 @@ class Config:
             days=7)  # Cache embeddings for 7 days
 
         # Embedding parameters
-        self.max_workers = 2
+        #self.max_workers = max(1, multiprocessing.cpu_count() // 2)
+        self.max_workers = 3
 
         # Model parameters
         # Options: 'lstm', 'tft', 'logistic_regression', 'random_forest', 'xgboost', 'lightgbm'
