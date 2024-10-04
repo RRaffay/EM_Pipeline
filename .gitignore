@@ -55,6 +55,7 @@ gdelt_cache/
 em_news_analysis/embeddings_cache/
 gdelt_embeddings_cache/    
 embeddings_cache/
+embeddings_batches/
 
 # .env file anywhere 
 **/.env
