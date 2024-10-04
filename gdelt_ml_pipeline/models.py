@@ -2,12 +2,15 @@
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import pytorch_lightning as pl
 from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.metrics import QuantileLoss
 import logging
 import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +37,7 @@ class LSTMModel(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        x = x.unsqueeze(1)  # Add sequence dimension
         h_0 = torch.zeros(self.lstm.num_layers, x.size(0),
                           self.lstm.hidden_size).to(x.device)
         c_0 = torch.zeros(self.lstm.num_layers, x.size(0),
@@ -81,6 +85,13 @@ def init_model(model_name, params):
         model = LSTMModel(**params)
     elif model_name == 'tft':
         model = TFTModel(**params)
+    elif model_name == 'logistic_regression':
+        model = LogisticRegression()
+    elif model_name == 'random_forest':
+        model = RandomForestClassifier()
+    elif model_name == 'xgboost':
+        model = xgb.XGBClassifier(
+            use_label_encoder=False, eval_metric='logloss')
     else:
         raise ValueError(f"Model {model_name} is not supported.")
     return model

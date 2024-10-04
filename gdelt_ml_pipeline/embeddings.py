@@ -11,7 +11,8 @@ from functools import partial
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from openai import OpenAI
 from functools import lru_cache
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from openai import RateLimitError
 from gdelt_ml_pipeline.config import Config
 import os
 import numpy as np
@@ -25,8 +26,10 @@ config = Config()
 client = OpenAI(api_key=config.openai_api_key)
 
 
-# @lru_cache(maxsize=1000)
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=20))
+@retry(
+    retry=retry_if_exception_type(RateLimitError),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(min=1, max=60))
 def get_embedding(text: str, model: str = "text-embedding-3-small", embedding_function: Callable = None) -> List[float]:
     """
     Generate an embedding for a given text using the specified embedding function or OpenAI's API.
@@ -62,24 +65,10 @@ def get_embedding(text: str, model: str = "text-embedding-3-small", embedding_fu
 def generate_embeddings(
     df: pd.DataFrame,
     embedding_function: Callable = None,
-    max_workers: int = 3,
-    save_embeddings_path: str = None,
-    save_indices_path: str = None,
+    max_workers: int = 3
 ) -> Tuple[np.ndarray, List[int]]:
     """
     Generate embeddings for the 'combined' column of a DataFrame using parallel processing.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame containing a 'combined' column with text to embed.
-        embedding_function (Callable, optional): A custom embedding function to use. If None, uses OpenAI's API. Defaults to None.
-        max_workers (int, optional): The maximum number of worker threads to use for parallel processing. Defaults to 3.
-        save_embeddings_path (str, optional): File path to save the generated embeddings. If None, embeddings are not saved. Defaults to None.
-        save_indices_path (str, optional): File path to save the valid position indices. If None, indices are not saved. Defaults to None.
-
-    Returns:
-        Tuple[np.ndarray, List[int]]: A tuple containing:
-            - np.ndarray: The generated embeddings as a 2D numpy array.
-            - List[int]: The list of valid position indices corresponding to successful embeddings.
     """
     embeddings = []
     valid_positions = []
@@ -120,42 +109,4 @@ def generate_embeddings(
 
     embeddings_array = np.array(embeddings)
 
-    # Save embeddings to file if path is provided
-    if save_embeddings_path is not None:
-        np.save(save_embeddings_path, embeddings_array)
-        logger.info(f"Embeddings saved to {save_embeddings_path}")
-
-    if save_indices_path is not None:
-        np.save(save_indices_path, np.array(valid_positions))
-        logger.info(f"Valid positions saved to {save_indices_path}")
-
     return embeddings_array, valid_positions
-
-
-def load_cached_embeddings(config):
-    """
-    Load cached embeddings if they exist and are not expired.
-
-    Args:
-        config (Config): The configuration object containing cache paths and expiry time.
-
-    Returns:
-        Tuple[np.ndarray, List[int], bool]: A tuple containing:
-            - np.ndarray: The loaded embeddings as a 2D numpy array, or None if not found or expired.
-            - List[int]: The list of valid position indices, or None if not found or expired.
-            - bool: True if valid cached embeddings were loaded, False otherwise.
-    """
-    if os.path.exists(config.save_embeddings_path) and os.path.exists(config.save_indices_path):
-        embeddings_mtime = os.path.getmtime(config.save_embeddings_path)
-        indices_mtime = os.path.getmtime(config.save_indices_path)
-        cache_time = datetime.fromtimestamp(
-            min(embeddings_mtime, indices_mtime))
-
-        if datetime.now() - cache_time <= config.embeddings_cache_expiry:
-            embeddings = np.load(config.save_embeddings_path)
-            valid_positions = np.load(config.save_indices_path).tolist()
-            logger.info(f"Loaded cached embeddings from {cache_time}")
-            return embeddings, valid_positions, True
-
-    logger.info("No valid cached embeddings found")
-    return None, None, False

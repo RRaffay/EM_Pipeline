@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 import logging
+from sklearn.metrics import accuracy_score
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,6 +60,10 @@ class Trainer:
                              gpus=1 if torch.cuda.is_available() else 0)
         trainer.fit(model, train_dataloaders=train_dataloader,
                     val_dataloaders=val_dataloader)
+        return model
+
+    def train_sklearn_model(self, model, X_train, y_train):
+        model.fit(X_train, y_train)
         return model
 
     def hyperparameter_tuning(self, train_loader, val_loader):

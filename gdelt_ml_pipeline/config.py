@@ -12,24 +12,24 @@ class Config:
         # Data parameters
         self.country_code = 'IN'  # India
         self.ticker_symbol = '^NSEI'  # Nifty 50 Index
-        self.hours = 120  # 5 days (24 hours * 5)
+        self.hours = 120   # 120 hours
         self.user_interest = "Economic growth and technology sector in India"
 
-        # Caching parameters
+        # Update caching parameters
         self.use_cache = True
         self.gdelt_cache_dir = "cache/gdelt_cache"
-        self.gdelt_cache_expiry = timedelta(hours=24)
-
-        # Embedding parameters
-        self.max_workers = 5
-        self.save_embeddings_path = "cache/embeddings_cache/embeddings.npy"
-        self.save_indices_path = "cache/embeddings_cache/indices.npy"
+        self.gdelt_embeddings_cache_dir = "cache/gdelt_embeddings_cache"
+        self.gdelt_cache_expiry = timedelta(days=5)
         self.embeddings_cache_expiry = timedelta(
             days=7)  # Cache embeddings for 7 days
 
+        # Embedding parameters
+        self.max_workers = 2
+
         # Model parameters
-        self.model_name = 'lstm'  # 'lstm' or 'tft'
-        self.hidden_size = 64
+        # Options: 'lstm', 'tft', 'logistic_regression', 'random_forest', 'xgboost', 'lightgbm'
+        self.model_name = 'lstm'
+        self.hidden_size = 64  # For neural network models
         self.num_layers = 2
         self.dropout = 0.2
         self.learning_rate = 1e-3
@@ -44,3 +44,6 @@ class Config:
         self.google_application_credentials = os.getenv(
             'GOOGLE_APPLICATION_CREDENTIALS', 'config/em-news-gdelt.json')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
+
+        # Stock data interval
+        self.stock_data_interval = '1h'

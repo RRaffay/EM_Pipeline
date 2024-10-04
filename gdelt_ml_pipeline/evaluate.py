@@ -5,6 +5,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_a
 import shap
 import matplotlib.pyplot as plt
 import logging
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,8 +38,21 @@ class Evaluator:
         logger.info(f'ROC AUC Score: {roc_auc:.4f}')
         return accuracy, precision, recall, roc_auc
 
+    def evaluate_sklearn_model(self, model, X_test, y_test):
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
+        y_pred = model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred)
+        recall = recall_score(y_test, y_pred)
+        roc_auc = roc_auc_score(y_test, y_pred_proba)
+        logger.info(f'Test Accuracy: {accuracy:.4f}')
+        logger.info(f'Precision: {precision:.4f}')
+        logger.info(f'Recall: {recall:.4f}')
+        logger.info(f'ROC AUC Score: {roc_auc:.4f}')
+        return accuracy, precision, recall, roc_auc
+
     def model_interpretability(self, model, test_loader):
-        # Use SHAP for model interpretability
+        # Use SHAP for model interpretability (PyTorch models)
         logger.info("Generating SHAP values for model interpretability.")
         X_test = []
         for X_batch, _ in test_loader:
@@ -48,5 +62,13 @@ class Evaluator:
             X_test).to(next(model.parameters()).device))
         shap_values = explainer.shap_values(torch.tensor(
             X_test).to(next(model.parameters()).device))
+        shap.summary_plot(shap_values, X_test, show=False)
+        plt.savefig(self.config.shap_summary_plot)
+
+    def model_interpretability_sklearn(self, model, X_test):
+        # Use SHAP for model interpretability (scikit-learn models)
+        logger.info("Generating SHAP values for model interpretability.")
+        explainer = shap.Explainer(model, X_test)
+        shap_values = explainer(X_test)
         shap.summary_plot(shap_values, X_test, show=False)
         plt.savefig(self.config.shap_summary_plot)

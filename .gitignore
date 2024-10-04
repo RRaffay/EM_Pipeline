@@ -53,6 +53,7 @@ em_news_analysis/gdelt_cache/
 em_news_analysis/notebooks/
 gdelt_cache/
 em_news_analysis/embeddings_cache/
+gdelt_embeddings_cache/    
 embeddings_cache/
 
 # .env file anywhere 
