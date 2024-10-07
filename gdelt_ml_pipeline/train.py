@@ -7,6 +7,7 @@ import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 import logging
 from sklearn.metrics import accuracy_score
+from gdelt_ml_pipeline.models import LSTMModel, TFTModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

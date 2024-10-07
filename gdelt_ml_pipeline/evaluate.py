@@ -68,7 +68,13 @@ class Evaluator:
     def model_interpretability_sklearn(self, model, X_test):
         # Use SHAP for model interpretability (scikit-learn models)
         logger.info("Generating SHAP values for model interpretability.")
-        explainer = shap.Explainer(model, X_test)
-        shap_values = explainer(X_test)
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_test)
+
+        # For binary classification, we typically want the second class's SHAP values
+        if isinstance(shap_values, list) and len(shap_values) > 1:
+            shap_values = shap_values[1]
+
         shap.summary_plot(shap_values, X_test, show=False)
         plt.savefig(self.config.shap_summary_plot)
+        plt.close()

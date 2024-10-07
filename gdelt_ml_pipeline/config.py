@@ -4,16 +4,17 @@ import os
 from dotenv import load_dotenv
 import multiprocessing
 
+
 class Config:
     def __init__(self):
         # Load environment variables
         load_dotenv()
 
         # Data parameters
-        self.country_code = 'IN'  # India
-        self.ticker_symbol = '^NSEI'  # Nifty 50 Index
-        self.hours = 48   # 48 hours
-        self.user_interest = "Economic growth and technology sector in India"
+        self.country_code = 'TH'  # Thailand
+        self.ticker_symbol = '^SET.BK'  # SET Index
+        self.hours = 2160
+        self.user_interest = "Economic growth and technology sector in Thailand"
 
         # Update caching parameters
         self.use_cache = True
@@ -24,12 +25,12 @@ class Config:
             days=7)  # Cache embeddings for 7 days
 
         # Embedding parameters
-        #self.max_workers = max(1, multiprocessing.cpu_count() // 2)
         self.max_workers = 3
+        self.embedding_cache_interval = 500
 
         # Model parameters
         # Options: 'lstm', 'tft', 'logistic_regression', 'random_forest', 'xgboost', 'lightgbm'
-        self.model_name = 'lstm'
+        self.model_name = 'xgboost'
         self.hidden_size = 64  # For neural network models
         self.num_layers = 2
         self.dropout = 0.2

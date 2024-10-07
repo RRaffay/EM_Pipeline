@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 class StockDataset(Dataset):
     def __init__(self, X, y):
-        self.X = X.astype(np.float32)
-        self.y = y.astype(np.float32)
+        self.X = X.float()
+        self.y = y.float()
 
     def __len__(self):
         return len(self.y)

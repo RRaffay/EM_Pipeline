@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader as TorchDataLoader
 import logging
 import numpy as np
 import random
+from sklearn.model_selection import train_test_split
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -36,16 +37,31 @@ def main():
         return
 
     logger.info("Data loaded successfully.")
-    logger.info(f"Hourly data: {hourly_data.head()}")
-    logger.info(f"Stock data: {stock_data.head()}")
+    logger.info(f"Hourly data shape: {hourly_data.shape}")
+    logger.info(f"Stock data shape: {stock_data.shape}")
+    logger.info(f"Hourly data columns: {hourly_data.columns.tolist()}")
+    logger.info(f"Stock data columns: {stock_data.columns.tolist()}")
+
+    if 'Date' in hourly_data.columns:
+        logger.info(
+            f"Hourly data date range: {hourly_data['Date'].min()} to {hourly_data['Date'].max()}")
+    else:
+        logger.warning("'Date' column not found in hourly data")
+
+    if 'Date' in stock_data.columns:
+        logger.info(
+            f"Stock data date range: {stock_data['Date'].min()} to {stock_data['Date'].max()}")
+    else:
+        logger.warning("'Date' column not found in stock data")
+        logger.info("First few rows of stock data:")
+        logger.info(stock_data.head())
 
     # Feature Engineering
     feature_engineering = FeatureEngineering(config)
     merged_df = feature_engineering.prepare_dataset(hourly_data, stock_data)
 
-    if len(merged_df) < 2:
-        logger.error(
-            "Not enough data for modeling. At least 2 rows are required.")
+    if merged_df is None or merged_df.empty:
+        logger.error("Feature engineering failed. Exiting.")
         return
 
     # Prepare data for modeling
@@ -54,8 +70,16 @@ def main():
     X = merged_df[feature_columns].values
     y = merged_df['Target'].values
 
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42)
+
+    # Convert to PyTorch tensors
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    y_tensor = torch.tensor(y, dtype=torch.float32)
+
     # Check if we have enough data for train-test split
-    if len(X) < 2:
+    if len(X_tensor) < 2:
         logger.error(
             "Not enough data for train-test split. At least 2 samples are required.")
         return
@@ -72,15 +96,9 @@ def main():
 
     # Training and Evaluation
     if config.model_name in ['lstm', 'tft']:
-        # Convert to PyTorch tensors
-        X_train_tensor = torch.tensor(X, dtype=torch.float32)
-        y_train_tensor = torch.tensor(y, dtype=torch.float32)
-        X_test_tensor = torch.tensor(X, dtype=torch.float32)
-        y_test_tensor = torch.tensor(y, dtype=torch.float32)
-
         # Create datasets and dataloaders
-        train_dataset = StockDataset(X_train_tensor, y_train_tensor)
-        test_dataset = StockDataset(X_test_tensor, y_test_tensor)
+        train_dataset = StockDataset(X_tensor, y_tensor)
+        test_dataset = StockDataset(X_tensor, y_tensor)
         train_loader = TorchDataLoader(
             train_dataset, batch_size=config.batch_size, shuffle=True)
         test_loader = TorchDataLoader(
@@ -102,12 +120,12 @@ def main():
     elif config.model_name in ['logistic_regression', 'random_forest', 'xgboost', 'lightgbm']:
         # For scikit-learn or similar models
         trainer = Trainer(config)
-        model = trainer.train_sklearn_model(model, X, y)
+        model = trainer.train_sklearn_model(model, X_train, y_train)
 
         # Evaluation
         evaluator = Evaluator(config)
-        evaluator.evaluate_sklearn_model(model, X, y)
-        evaluator.model_interpretability_sklearn(model, X)
+        evaluator.evaluate_sklearn_model(model, X_test, y_test)
+        evaluator.model_interpretability_sklearn(model, X_test)
 
     else:
         logger.error(f"Model {config.model_name} is not supported.")

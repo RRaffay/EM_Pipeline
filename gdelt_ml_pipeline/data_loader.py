@@ -48,31 +48,39 @@ class DataLoader:
         query = f"""
             WITH events AS (
                 SELECT
-                    GlobalEventID,
-                    DATEADDED,
-                    SQLDATE,
-                    Actor1Name,
-                    Actor2Name,
-                    IsRootEvent,
-                    EventCode,
-                    EventBaseCode,
-                    EventRootCode,
-                    QuadClass,
-                    GoldsteinScale,
-                    NumMentions,
-                    NumSources,
-                    NumArticles,
-                    AvgTone,
-                    Actor1Geo_CountryCode,
-                    Actor2Geo_CountryCode,
-                    ActionGeo_CountryCode,
-                    SOURCEURL
-                FROM
-                    `gdelt-bq.gdeltv2.events_partitioned`
-                WHERE
-                    _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours + 24} HOUR)
-                    AND DATEADDED >= CAST(FORMAT_TIMESTAMP('%Y%m%d%H%M%S', TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours} HOUR)) AS INT64)
-                    AND (Actor1Geo_CountryCode = '{country_code}' OR Actor2Geo_CountryCode = '{country_code}' OR ActionGeo_CountryCode = '{country_code}')
+                    *,
+                    ROW_NUMBER() OVER (PARTITION BY SOURCEURL ORDER BY DATEADDED DESC) AS row_num
+                FROM (
+                    SELECT
+                        GlobalEventID,
+                        DATEADDED,
+                        SQLDATE,
+                        Actor1Name,
+                        Actor2Name,
+                        IsRootEvent,
+                        EventCode,
+                        EventBaseCode,
+                        EventRootCode,
+                        QuadClass,
+                        GoldsteinScale,
+                        NumMentions,
+                        NumSources,
+                        NumArticles,
+                        AvgTone,
+                        Actor1Geo_CountryCode,
+                        Actor2Geo_CountryCode,
+                        ActionGeo_CountryCode,
+                        SOURCEURL
+                    FROM
+                        `gdelt-bq.gdeltv2.events_partitioned`
+                    WHERE
+                        _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours + 24} HOUR)
+                        AND DATEADDED >= CAST(FORMAT_TIMESTAMP('%Y%m%d%H%M%S', TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours} HOUR)) AS INT64)
+                        AND (Actor1Geo_CountryCode = '{country_code}' OR Actor2Geo_CountryCode = '{country_code}' OR ActionGeo_CountryCode = '{country_code}')
+                )
+            ),
+            deduplicated_events AS (
+                SELECT * FROM events WHERE row_num = 1
             ),
             gkg AS (
                 SELECT
@@ -112,7 +120,7 @@ class DataLoader:
                 g.TranslationInfo,
                 g.Extras
             FROM
-                events e
+                deduplicated_events e
             LEFT JOIN
                 gkg g
             ON
@@ -131,14 +139,8 @@ class DataLoader:
             df['DATEADDED'] = pd.to_datetime(
                 df['DATEADDED'], format='%Y%m%d%H%M%S')
 
-            # Remove duplicates
-            rows_before = len(df)
-            df.drop_duplicates(subset=['SOURCEURL'],
-                               keep='first', inplace=True)
-            rows_after = len(df)
-            logger.info(f"Removed {rows_before - rows_after} duplicate rows.")
-
-            logger.info(f"Fetched {len(df)} rows of GDELT data.")
+            # Remove the duplicate removal code here, as it's now handled in the query
+            logger.info(f"Fetched {len(df)} rows of deduplicated GDELT data.")
             if self.config.use_cache:
                 with open(cache_file, 'wb') as f:
                     pickle.dump((datetime.now(), df), f)
@@ -150,28 +152,24 @@ class DataLoader:
 
     def preprocess_gdelt_data(self, df):
         """
-        Preprocess GDELT data and generate embeddings.
+        Preprocess GDELT data and generate embeddings with partial caching.
         """
         # Apply preprocessing from preprocessor.py
         df = preprocess_data_summary(df)
 
-        # Generate new embeddings using OpenAI
+        # Generate new embeddings using OpenAI with partial caching
+        cache_file = os.path.join(self.config.gdelt_embeddings_cache_dir,
+                                  f"{self.config.country_code}_{self.config.hours}hours_embeddings_cache.json")
         embeddings, valid_positions = generate_embeddings(
             df,
             embedding_function=None,  # Use default OpenAI function
+            cache_file=cache_file,
+            cache_interval=self.config.embedding_cache_interval
         )
 
         # Add embeddings to the dataframe
         df['embedding'] = pd.Series(
             embeddings.tolist(), index=df.index[valid_positions])
-
-        # Cache the preprocessed data with embeddings
-        if self.config.use_cache:
-            cache_file = os.path.join(self.config.gdelt_embeddings_cache_dir,
-                                      f"{self.config.country_code}_{self.config.hours}hours.pkl")
-            with open(cache_file, 'wb') as f:
-                pickle.dump((datetime.now(), df), f)
-            logger.info(f"Cached preprocessed GDELT data with embeddings.")
 
         return df
 
@@ -225,13 +223,15 @@ class DataLoader:
         Load GDELT data, either from cache or by fetching and preprocessing.
         """
         # Check for preprocessed data with embeddings
-        preprocessed_cache_file = os.path.join(self.config.gdelt_embeddings_cache_dir, f"{country_code}_{hours}hours_preprocessed.pkl")
+        preprocessed_cache_file = os.path.join(
+            self.config.gdelt_embeddings_cache_dir, f"{country_code}_{hours}hours_preprocessed.pkl")
 
         if self.config.use_cache and os.path.exists(preprocessed_cache_file):
             with open(preprocessed_cache_file, 'rb') as f:
                 cache_time, df = pickle.load(f)
             if datetime.now() - cache_time <= self.config.embeddings_cache_expiry:
-                logger.info(f"Using cached preprocessed GDELT data with embeddings from {cache_time}.")
+                logger.info(
+                    f"Using cached preprocessed GDELT data with embeddings from {cache_time}.")
                 return df
 
         # Fetch raw data (now with its own caching mechanism)
@@ -279,3 +279,19 @@ class DataLoader:
             return None, None
 
         return hourly_data, stock_data
+
+    def load_stock_data(self, symbol, start_date, end_date):
+        logger.info(
+            f"Fetching stock data for {symbol} from {start_date} to {end_date}.")
+        stock_data = yf.download(
+            symbol, start=start_date, end=end_date, interval="1h")
+        logger.info(f"Fetched {len(stock_data)} rows of stock data.")
+
+        # Reset index to make 'Datetime' a column
+        stock_data = stock_data.reset_index()
+
+        # Rename 'Datetime' column to 'Date' for consistency
+        stock_data = stock_data.rename(columns={'Datetime': 'Date'})
+
+        logger.info(f"Stock data columns: {stock_data.columns}")
+        return stock_data
